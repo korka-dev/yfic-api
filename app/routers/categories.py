@@ -1,16 +1,20 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import cached
+from app.core.cache import cached, invalidate
+from app.core.deps import get_current_user
 from app.db.database import get_db
+from app.models.category_cover import CategoryCover
 from app.models.product import Product
+from app.models.user import User
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
 CACHE_TTL = 60
 
-CATEGORY_COVERS = {
+CATEGORY_COVERS_DEFAULT = {
     "femme": {
         "cover": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=1000&q=80",
         "tone": "#b07a53",
@@ -25,8 +29,34 @@ CATEGORY_COVERS = {
     },
 }
 
-
 DEFAULT_TONE = "#cccccc"
+
+
+async def _resolve_covers(db: AsyncSession, rows: list) -> list:
+    db_covers_result = await db.execute(select(CategoryCover))
+    db_covers = {
+        row.key: {"cover": row.cover, "tone": row.tone}
+        for row in db_covers_result.scalars()
+    }
+
+    categories = []
+    for key, count in rows:
+        if key in db_covers and db_covers[key]["cover"]:
+            meta = db_covers[key]
+        elif key in CATEGORY_COVERS_DEFAULT:
+            meta = CATEGORY_COVERS_DEFAULT[key]
+        else:
+            rep = await db.execute(
+                select(Product).where(Product.category == key).order_by(Product.order).limit(1)
+            )
+            product = rep.scalar_one_or_none()
+            meta = {
+                "cover": product.image if product else "",
+                "tone": product.tone if product else DEFAULT_TONE,
+            }
+        categories.append({"key": key, "count": count, **meta})
+
+    return categories
 
 
 @router.get("")
@@ -38,22 +68,50 @@ async def list_categories(response: Response, db: AsyncSession = Depends(get_db)
             select(Product.category, func.count(Product.id)).group_by(Product.category)
         )
         rows = result.all()
-
-        categories = []
-        for key, count in rows:
-            meta = CATEGORY_COVERS.get(key)
-            if meta is None:
-                rep = await db.execute(
-                    select(Product).where(Product.category == key).order_by(Product.order).limit(1)
-                )
-                product = rep.scalar_one_or_none()
-                meta = {
-                    "cover": product.image if product else "",
-                    "tone": product.tone if product else DEFAULT_TONE,
-                }
-            categories.append({"key": key, "count": count, **meta})
-
+        categories = await _resolve_covers(db, rows)
         categories.sort(key=lambda c: -c["count"])
         return categories
 
     return await cached("categories", CACHE_TTL, load)
+
+
+@router.get("/covers")
+async def list_covers(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Product.category, func.count(Product.id)).group_by(Product.category)
+    )
+    rows = result.all()
+    categories = await _resolve_covers(db, rows)
+    categories.sort(key=lambda c: c["key"])
+    return categories
+
+
+class CoverUpdate(BaseModel):
+    cover: str
+    tone: str = "#cccccc"
+
+
+@router.patch("/{key}/cover")
+async def update_category_cover(
+    key: str,
+    payload: CoverUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    existing = await db.get(CategoryCover, key)
+    if existing:
+        existing.cover = payload.cover
+        existing.tone = payload.tone
+    else:
+        db.add(CategoryCover(key=key, cover=payload.cover, tone=payload.tone))
+
+    await db.commit()
+    invalidate("categories")
+
+    return {"key": key, "cover": payload.cover, "tone": payload.tone}

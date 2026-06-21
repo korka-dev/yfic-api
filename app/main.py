@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -6,9 +7,26 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
+from app.db.database import Base, engine
 from app.routers import auth, categories, checkout, contact, dashboard, newsletter, orders, products, uploads, webhooks
 
-app = FastAPI(title="YFIC API", version="1.0.0")
+# Import all models so Base.metadata knows about them
+import app.models.category_cover  # noqa: F401
+import app.models.contact  # noqa: F401
+import app.models.newsletter  # noqa: F401
+import app.models.order  # noqa: F401
+import app.models.product  # noqa: F401
+import app.models.user  # noqa: F401
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
+
+app = FastAPI(title="YFIC API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
