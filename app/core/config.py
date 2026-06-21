@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     store_email: str = "noreply@yfic.com"
     store_name: str = "YFIC"
+    cloudinary_cloud_name: str = ""
+    cloudinary_api_key: str = ""
+    cloudinary_api_secret: str = ""
 
     @property
     def async_database_url(self) -> str:
