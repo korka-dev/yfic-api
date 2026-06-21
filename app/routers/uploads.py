@@ -2,6 +2,7 @@ import io
 
 import cloudinary
 import cloudinary.uploader
+import filetype
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 from app.core.config import settings
@@ -10,7 +11,7 @@ from app.models.user import User
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
-ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"}
+ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"}
 MAX_SIZE = 8 * 1024 * 1024  # 8 MB
 
 
@@ -20,12 +21,15 @@ def _cloudinary_configured() -> bool:
 
 @router.post("")
 async def upload_image(file: UploadFile, current_user: User = Depends(get_current_user)):
-    if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail="Format d'image non supporté")
-
     data = await file.read()
+
     if len(data) > MAX_SIZE:
         raise HTTPException(status_code=400, detail="Image trop volumineuse (max 8 Mo)")
+
+    # Check magic bytes — do NOT trust client-provided Content-Type
+    kind = filetype.guess(data)
+    if kind is None or kind.mime not in ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Format d'image non supporté (jpeg, png, webp, gif, avif)")
 
     if not _cloudinary_configured():
         raise HTTPException(

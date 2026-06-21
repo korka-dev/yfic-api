@@ -17,6 +17,9 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     if not settings.stripe_secret_key:
         raise HTTPException(status_code=503, detail="Stripe non configuré")
 
+    if not settings.stripe_webhook_secret:
+        raise HTTPException(status_code=503, detail="STRIPE_WEBHOOK_SECRET manquant — configurez-le dans Vercel env vars")
+
     stripe.api_key = settings.stripe_secret_key
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature", "")

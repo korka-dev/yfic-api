@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,10 +10,12 @@ from app.models.newsletter import NewsletterSubscriber
 from app.schemas.newsletter import NewsletterCreate, NewsletterOut
 
 router = APIRouter(prefix="/api/newsletter", tags=["newsletter"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("", response_model=NewsletterOut, status_code=201)
-async def subscribe(payload: NewsletterCreate, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def subscribe(request: Request, payload: NewsletterCreate, db: AsyncSession = Depends(get_db)):
     existing = await db.execute(
         select(NewsletterSubscriber).where(NewsletterSubscriber.email == payload.email)
     )
