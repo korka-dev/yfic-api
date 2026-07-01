@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -80,11 +82,19 @@ async def list_covers(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Product categories with counts
     result = await db.execute(
         select(Product.category, func.count(Product.id)).group_by(Product.category)
     )
-    rows = result.all()
-    categories = await _resolve_covers(db, rows)
+    product_rows = result.all()
+    product_keys = {r[0] for r in product_rows}
+
+    # Also include CategoryCover entries that have no products yet
+    covers_result = await db.execute(select(CategoryCover))
+    standalone = [(c.key, 0) for c in covers_result.scalars() if c.key not in product_keys]
+
+    all_rows = list(product_rows) + standalone
+    categories = await _resolve_covers(db, all_rows)
     categories.sort(key=lambda c: c["key"])
     return categories
 
@@ -92,6 +102,36 @@ async def list_covers(
 class CoverUpdate(BaseModel):
     cover: str
     tone: str = "#cccccc"
+
+
+class CategoryCreate(BaseModel):
+    key: str
+    cover: str = ""
+    tone: str = "#cccccc"
+
+
+@router.post("", status_code=201)
+async def create_category(
+    payload: CategoryCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    key = re.sub(r"[^a-z0-9]+", "-", payload.key.lower().strip()).strip("-")
+    if not key:
+        raise HTTPException(status_code=400, detail="Nom de collection invalide")
+
+    existing = await db.get(CategoryCover, key)
+    if existing:
+        raise HTTPException(status_code=409, detail="Cette collection existe déjà")
+
+    db.add(CategoryCover(key=key, cover=payload.cover, tone=payload.tone))
+    await db.commit()
+    invalidate("categories")
+
+    return {"key": key, "count": 0, "cover": payload.cover, "tone": payload.tone}
 
 
 @router.patch("/{key}/cover")
@@ -115,3 +155,31 @@ async def update_category_cover(
     invalidate("categories")
 
     return {"key": key, "cover": payload.cover, "tone": payload.tone}
+
+
+@router.delete("/{key}")
+async def delete_category(
+    key: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    result = await db.execute(
+        select(func.count(Product.id)).where(Product.category == key)
+    )
+    count = result.scalar()
+    if count and count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Supprimez d'abord les {count} produit(s) de cette collection.",
+        )
+
+    existing = await db.get(CategoryCover, key)
+    if existing:
+        await db.delete(existing)
+        await db.commit()
+
+    invalidate("categories")
+    return {"ok": True}
