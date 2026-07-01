@@ -51,6 +51,7 @@ class OrderStatusUpdate(BaseModel):
 class CheckoutCreate(BaseModel):
     items: list[OrderItemIn]
     customer: dict | None = None
+    shipping_mode: str = "domicile"
 
 
 class CheckoutOut(BaseModel):
