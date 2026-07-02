@@ -6,7 +6,7 @@ import filetype
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 from app.core.config import settings
-from app.core.deps import get_current_user
+from app.core.deps import require_admin
 from app.models.user import User
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
@@ -20,7 +20,7 @@ def _cloudinary_configured() -> bool:
 
 
 @router.post("")
-async def upload_image(file: UploadFile, current_user: User = Depends(get_current_user)):
+async def upload_image(file: UploadFile, current_user: User = Depends(require_admin)):
     data = await file.read()
 
     if len(data) > MAX_SIZE:

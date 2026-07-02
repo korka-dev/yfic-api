@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cached, invalidate
-from app.core.deps import get_current_user
+from app.core.deps import require_admin
 from app.db.database import get_db
 from app.models.product import Product
 from app.models.user import User
@@ -19,7 +19,7 @@ def slugify(text: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return slug or uuid.uuid4().hex[:8]
 
-CACHE_TTL = 60  # products change rarely; collapse concurrent reads onto one DB query
+CACHE_TTL = 60
 PUBLIC_CACHE_HEADER = "public, max-age=30, stale-while-revalidate=60"
 
 
@@ -64,7 +64,10 @@ async def get_product(slug: str, response: Response, db: AsyncSession = Depends(
 
 @router.get("/{slug}/related", response_model=list[ProductOut])
 async def get_related(
-    slug: str, response: Response, limit: int = 4, db: AsyncSession = Depends(get_db)
+    slug: str,
+    response: Response,
+    limit: int = Query(4, ge=1, le=20),  # borné pour éviter l'abus (L1)
+    db: AsyncSession = Depends(get_db),
 ):
     response.headers["Cache-Control"] = PUBLIC_CACHE_HEADER
 
@@ -97,7 +100,7 @@ async def get_related(
 async def create_product(
     payload: ProductCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),  # admin uniquement (H1)
 ):
     base_slug = slugify(payload.name.fr)
     slug = base_slug
@@ -133,7 +136,7 @@ async def update_product(
     product_id: str,
     payload: ProductUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),  # admin uniquement (H1)
 ):
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
@@ -160,7 +163,7 @@ async def update_product(
 async def delete_product(
     product_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),  # admin uniquement (H1)
 ):
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()

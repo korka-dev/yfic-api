@@ -6,11 +6,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cached, invalidate
-from app.core.deps import get_current_user
+from app.core.deps import require_admin
 from app.db.database import get_db
 from app.models.category_cover import CategoryCover
 from app.models.product import Product
-from app.models.user import User
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
@@ -80,7 +79,7 @@ async def list_categories(response: Response, db: AsyncSession = Depends(get_db)
 @router.get("/covers")
 async def list_covers(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user=Depends(require_admin),  # cohérent (L6)
 ):
     # Product categories with counts
     result = await db.execute(
@@ -114,10 +113,8 @@ class CategoryCreate(BaseModel):
 async def create_category(
     payload: CategoryCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),  # cohérent avec les autres routes (L6)
 ):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin only")
 
     key = re.sub(r"[^a-z0-9]+", "-", payload.key.lower().strip()).strip("-")
     if not key:
@@ -139,10 +136,8 @@ async def update_category_cover(
     key: str,
     payload: CoverUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),  # cohérent (L6)
 ):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin only")
 
     existing = await db.get(CategoryCover, key)
     if existing:
@@ -161,10 +156,8 @@ async def update_category_cover(
 async def delete_category(
     key: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),  # cohérent (L6)
 ):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin only")
 
     result = await db.execute(
         select(func.count(Product.id)).where(Product.category == key)

@@ -1,3 +1,5 @@
+from html import escape
+
 import resend
 from app.core.config import settings
 from app.models.order import Order
@@ -6,7 +8,7 @@ from app.models.order import Order
 def _order_confirmation_html(order: Order, lang: str = "fr") -> str:
     is_fr = lang == "fr"
     customer = order.customer or {}
-    name = customer.get("name", "")
+    name = escape(customer.get("name", ""))
 
     greeting = f"Bonjour {name}," if is_fr else f"Hello {name},"
     subject_line = "Merci pour votre commande" if is_fr else "Thank you for your order"
@@ -19,12 +21,12 @@ def _order_confirmation_html(order: Order, lang: str = "fr") -> str:
     items_label = "Articles" if is_fr else "Items"
     subtotal_label = "Sous-total" if is_fr else "Subtotal"
     shipping_label = "Livraison" if is_fr else "Shipping"
-    shipping_value = "Offerte" if order.shipping == 0 else f"{order.shipping:.0f} €"
+    shipping_value = "Offerte" if order.shipping == 0 else f"{order.shipping:.2f} €"
     total_label = "Total" if is_fr else "Total"
     footer_text = (
-        "Votre commande sera expédiée sous 48 h. À très bientôt."
+        "Votre commande sera préparée et expédiée dans les meilleurs délais. À très bientôt."
         if is_fr
-        else "Your order will ship within 48 h. See you soon."
+        else "Your order will be prepared and shipped as soon as possible. See you soon."
     )
     tagline = (
         "Maison de vêtements contemporaine. Fait avec soin, pour durer."
@@ -34,16 +36,19 @@ def _order_confirmation_html(order: Order, lang: str = "fr") -> str:
 
     rows = ""
     for item in order.items:
+        item_name = escape(item.name)
+        item_color = escape(item.color)
+        item_size = escape(item.size)
         rows += f"""
         <tr>
           <td style="padding:10px 0;border-bottom:1px solid #e8e0d4;font-family:Georgia,serif;font-size:15px;color:#16140f;">
-            {item.name}
+            {item_name}
             <span style="font-size:12px;color:#8a8276;display:block;margin-top:2px;">
-              {item.color} · {item.size} · x{item.qty}
+              {item_color} · {item_size} · x{item.qty}
             </span>
           </td>
           <td style="padding:10px 0;border-bottom:1px solid #e8e0d4;text-align:right;font-size:14px;color:#16140f;white-space:nowrap;">
-            {item.price * item.qty:.0f} €
+            {item.price * item.qty:.2f} €
           </td>
         </tr>"""
 
@@ -84,7 +89,7 @@ def _order_confirmation_html(order: Order, lang: str = "fr") -> str:
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
               <tr>
                 <td style="font-size:13px;color:#8a8276;padding:6px 0;">{subtotal_label}</td>
-                <td style="font-size:13px;color:#16140f;text-align:right;padding:6px 0;">{order.subtotal:.0f} €</td>
+                <td style="font-size:13px;color:#16140f;text-align:right;padding:6px 0;">{order.subtotal:.2f} €</td>
               </tr>
               <tr>
                 <td style="font-size:13px;color:#8a8276;padding:6px 0;">{shipping_label}</td>
@@ -95,7 +100,7 @@ def _order_confirmation_html(order: Order, lang: str = "fr") -> str:
               </tr>
               <tr>
                 <td style="font-family:Georgia,serif;font-size:16px;color:#16140f;padding:4px 0;"><strong>{total_label}</strong></td>
-                <td style="font-family:Georgia,serif;font-size:16px;color:#16140f;text-align:right;padding:4px 0;"><strong>{order.total:.0f} €</strong></td>
+                <td style="font-family:Georgia,serif;font-size:16px;color:#16140f;text-align:right;padding:4px 0;"><strong>{order.total:.2f} €</strong></td>
               </tr>
             </table>
 

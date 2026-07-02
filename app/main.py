@@ -38,14 +38,17 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_origin_regex=r"http://localhost:\d+",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_kwargs: dict = {
+    "allow_origins": settings.cors_origin_list,
+    "allow_credentials": True,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+if not settings.is_production:
+    # Autorise tous les ports localhost uniquement en développement (L3)
+    _cors_kwargs["allow_origin_regex"] = r"http://localhost:\d+"
+
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)

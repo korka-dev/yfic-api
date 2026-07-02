@@ -1,5 +1,4 @@
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Cookie, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,16 +6,25 @@ from app.core.security import decode_access_token
 from app.db.database import get_db
 from app.models.user import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
-
 
 async def get_current_user(
-    token: str | None = Depends(oauth2_scheme),
+    authorization: str | None = Header(default=None),
+    access_token: str | None = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     credentials_error = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
     )
+
+    # Authorization header takes priority, then fall back to HttpOnly cookie
+    token: str | None = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+    elif access_token:
+        token = access_token
+
     if not token:
         raise credentials_error
 

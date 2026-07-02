@@ -1,5 +1,7 @@
 import stripe
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +12,7 @@ from app.models.product import Product
 from app.schemas.order import CheckoutCreate, CheckoutOut
 
 router = APIRouter(prefix="/api/checkout", tags=["checkout"])
+limiter = Limiter(key_func=get_remote_address)
 
 # Tiers: (max_qty_inclusive, price)
 _RATES = {
@@ -36,13 +39,18 @@ def _compute_shipping(total_qty: int, subtotal: float, mode: str) -> float:
 
 
 @router.post("", response_model=CheckoutOut, status_code=201)
-async def create_checkout(payload: CheckoutCreate, db: AsyncSession = Depends(get_db)):
+@limiter.limit("15/minute")  # évite la création de masse de PaymentIntents Stripe (M1)
+async def create_checkout(
+    request: Request,
+    payload: CheckoutCreate,
+    db: AsyncSession = Depends(get_db),
+):
     if not settings.stripe_secret_key:
         raise HTTPException(status_code=503, detail="Stripe non configuré")
 
     stripe.api_key = settings.stripe_secret_key
 
-    # Validate prices against DB — never trust client-provided prices
+    # Validation des prix contre la DB — ne jamais faire confiance aux prix du client
     product_ids = [item.product_id for item in payload.items]
     result = await db.execute(select(Product).where(Product.id.in_(product_ids)))
     db_products = {p.id: p for p in result.scalars().all()}

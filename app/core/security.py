@@ -8,7 +8,7 @@ from app.core.config import settings
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # 8 h — réduire l'exposition en cas de vol
 
 
 def hash_password(password: str) -> str:
