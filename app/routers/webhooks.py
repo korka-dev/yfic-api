@@ -7,9 +7,9 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.order import Order
-from app.services.email import send_order_confirmation
+from app.services.email import send_admin_order_notification, send_order_confirmation
 
-router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
+router = APIRouter(prefix="/webhook", tags=["webhooks"])
 
 
 @router.post("/stripe")
@@ -47,6 +47,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                 order.status = "confirmed"
                 await db.commit()
                 await db.refresh(order, attribute_names=["items"])
-                await send_order_confirmation(order)
+                await send_order_confirmation(order)        # → client
+                await send_admin_order_notification(order)  # → admin
 
     return {"received": True}

@@ -10,6 +10,7 @@ from app.core.deps import require_admin
 from app.db.database import get_db
 from app.models.category_cover import CategoryCover
 from app.models.product import Product
+from app.models.user import User
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
