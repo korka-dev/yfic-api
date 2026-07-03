@@ -1,3 +1,4 @@
+import resend
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
@@ -10,6 +11,23 @@ from app.models.order import Order
 from app.services.email import send_admin_order_notification, send_order_confirmation
 
 router = APIRouter(prefix="/webhook", tags=["webhooks"])
+
+
+@router.get("/test-email")
+async def test_email():
+    if not settings.resend_api_key:
+        return {"error": "RESEND_API_KEY manquant"}
+    resend.api_key = settings.resend_api_key
+    try:
+        result = resend.Emails.send({
+            "from": f"{settings.store_name} <{settings.store_email}>",
+            "to": [settings.admin_email],
+            "subject": "Test email YFIC",
+            "html": "<p>Si tu reçois ce mail, Resend fonctionne correctement.</p>",
+        })
+        return {"ok": True, "id": result.get("id"), "to": settings.admin_email, "from": settings.store_email}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @router.post("/stripe")

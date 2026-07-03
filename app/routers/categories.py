@@ -160,20 +160,17 @@ async def delete_category(
     current_user: User = Depends(require_admin),  # cohérent (L6)
 ):
 
-    result = await db.execute(
-        select(func.count(Product.id)).where(Product.category == key)
-    )
-    count = result.scalar()
-    if count and count > 0:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Supprimez d'abord les {count} produit(s) de cette collection.",
-        )
+    result = await db.execute(select(Product).where(Product.category == key))
+    products = result.scalars().all()
+    deleted_count = len(products)
+    for product in products:
+        await db.delete(product)
 
     existing = await db.get(CategoryCover, key)
     if existing:
         await db.delete(existing)
-        await db.commit()
 
-    invalidate("categories")
-    return {"ok": True}
+    await db.commit()
+
+    invalidate()  # les produits supprimés impactent aussi les caches products/related
+    return {"ok": True, "deletedProducts": deleted_count}
