@@ -6,15 +6,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.core.deps import require_admin
 from app.db.database import get_db
 from app.models.order import Order
+from app.models.user import User
 from app.services.email import send_admin_order_notification, send_order_confirmation
 
 router = APIRouter(prefix="/webhook", tags=["webhooks"])
 
 
 @router.get("/test-email")
-async def test_email():
+async def test_email(current_user: User = Depends(require_admin)):
     if not settings.resend_api_key:
         return {"error": "RESEND_API_KEY manquant"}
     resend.api_key = settings.resend_api_key
@@ -25,9 +27,9 @@ async def test_email():
             "subject": "Test email YFIC",
             "html": "<p>Si tu reçois ce mail, Resend fonctionne correctement.</p>",
         })
-        return {"ok": True, "id": result.get("id"), "to": settings.admin_email, "from": settings.store_email}
-    except Exception as e:
-        return {"error": str(e)}
+        return {"ok": True, "id": result.get("id")}
+    except Exception:
+        return {"error": "Échec de l'envoi"}
 
 
 @router.post("/stripe")

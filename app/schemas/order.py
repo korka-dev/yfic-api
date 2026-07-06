@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 OrderStatus = Literal["pending", "confirmed", "delivered", "cancelled"]
 
@@ -14,7 +14,7 @@ class OrderItemIn(BaseModel):
     image: str
     size: str
     color: str
-    qty: int
+    qty: int = Field(gt=0, le=100)
 
 
 class OrderItemOut(OrderItemIn):

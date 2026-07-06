@@ -62,6 +62,12 @@ async def create_checkout(
         db_product = db_products.get(item.product_id)
         if not db_product:
             raise HTTPException(status_code=400, detail=f"Produit introuvable : {item.product_id}")
+        if db_product.stock < item.qty:
+            product_name = db_product.name.get("fr", item.product_id) if isinstance(db_product.name, dict) else db_product.name
+            raise HTTPException(
+                status_code=400,
+                detail=f"Stock insuffisant pour {product_name}",
+            )
         real_price = db_product.price
         subtotal += real_price * item.qty
         total_qty += item.qty
