@@ -1,9 +1,14 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 OrderStatus = Literal["pending", "confirmed", "delivered", "cancelled"]
+
+
+class CustomerIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    email: EmailStr
 
 
 class OrderItemIn(BaseModel):
@@ -25,8 +30,8 @@ class OrderItemOut(OrderItemIn):
 
 
 class OrderCreate(BaseModel):
-    items: list[OrderItemIn]
-    customer: dict | None = None
+    items: list[OrderItemIn] = Field(min_length=1, max_length=50)
+    customer: CustomerIn | None = None
 
 
 class OrderOut(BaseModel):
@@ -49,8 +54,8 @@ class OrderStatusUpdate(BaseModel):
 
 
 class CheckoutCreate(BaseModel):
-    items: list[OrderItemIn]
-    customer: dict | None = None
+    items: list[OrderItemIn] = Field(min_length=1, max_length=50)
+    customer: CustomerIn | None = None
     shipping_mode: str = "domicile"
 
 

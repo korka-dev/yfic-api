@@ -146,7 +146,40 @@ async def test_checkout_without_stripe_configured_returns_503(client):
     original = settings.stripe_secret_key
     settings.stripe_secret_key = ""
     try:
-        res = await client.post("/api/checkout", json={"items": [], "shipping_mode": "domicile"})
+        # items non vide requis : la validation Pydantic (422) passe avant le handler
+        payload = {
+            "items": [
+                {
+                    "product_id": "p1",
+                    "slug": "s",
+                    "name": "n",
+                    "price": 1.0,
+                    "image": "i",
+                    "size": "M",
+                    "color": "Noir",
+                    "qty": 1,
+                }
+            ],
+            "shipping_mode": "domicile",
+        }
+        res = await client.post("/api/checkout", json=payload)
         assert res.status_code == 503
     finally:
         settings.stripe_secret_key = original
+
+
+@pytest.mark.asyncio
+async def test_checkout_rejects_empty_items_and_bad_customer(client):
+    """items vide ou customer malformé → 422 (audit : payload borné et typé)."""
+    res = await client.post("/api/checkout", json={"items": [], "shipping_mode": "domicile"})
+    assert res.status_code == 422
+
+    item = {
+        "product_id": "p1", "slug": "s", "name": "n", "price": 1.0,
+        "image": "i", "size": "M", "color": "Noir", "qty": 1,
+    }
+    res = await client.post(
+        "/api/checkout",
+        json={"items": [item], "customer": {"name": "Jane", "email": "pas-un-email"}},
+    )
+    assert res.status_code == 422

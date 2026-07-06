@@ -1,3 +1,4 @@
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -6,13 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from app.core.config import settings
-
-limiter = Limiter(key_func=get_remote_address)
+from app.core.ratelimit import limiter
 from app.db.database import Base, engine
 from app.routers import auth, categories, checkout, contact, dashboard, newsletter, orders, products, uploads, webhooks
 
@@ -49,6 +48,23 @@ if not settings.is_production:
     _cors_kwargs["allow_origin_regex"] = r"http://localhost:\d+"
 
 app.add_middleware(CORSMiddleware, **_cors_kwargs)
+
+_LOCALHOST_ORIGIN = re.compile(r"^http://localhost:\d+$")
+
+
+@app.middleware("http")
+async def block_cross_site_mutations(request: Request, call_next):
+    """Anti-CSRF : le cookie est SameSite=None en production, donc envoyé sur
+    toute requête cross-site. Les POST multipart/form-data partent sans preflight
+    CORS — on rejette donc toute mutation dont l'Origin n'est pas autorisée.
+    Les requêtes sans Origin (Stripe, curl, server-to-server) passent : le CSRF
+    est un problème de navigateur, et un navigateur envoie toujours Origin."""
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        if origin and origin not in settings.cors_origin_list:
+            if settings.is_production or not _LOCALHOST_ORIGIN.match(origin):
+                return JSONResponse(status_code=403, content={"detail": "Origine non autorisée"})
+    return await call_next(request)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)

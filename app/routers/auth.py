@@ -1,20 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_current_user
-from app.core.security import create_access_token, verify_password
+from app.core.ratelimit import limiter
+from app.core.security import create_access_token, hash_password, verify_password
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-limiter = Limiter(key_func=get_remote_address)
 
 _COOKIE_MAX_AGE = 60 * 60 * 8  # 8 h — aligné sur la durée de vie du JWT
+
+# Hash factice vérifié quand l'email est inconnu : sans lui, la réponse est
+# quasi instantanée (pas de bcrypt) et permet d'énumérer les comptes au timing.
+_DUMMY_HASH = hash_password("timing-equalizer-not-a-real-password")
 
 
 def _set_auth_cookie(response: Response, token: str) -> None:
@@ -40,7 +42,10 @@ async def login(
 ):
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
-    if not user or not verify_password(payload.password, user.hashed_password):
+    password_ok = verify_password(
+        payload.password, user.hashed_password if user else _DUMMY_HASH
+    )
+    if not user or not password_ok:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token = create_access_token(subject=user.email)
     _set_auth_cookie(response, token)

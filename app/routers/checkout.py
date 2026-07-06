@@ -1,18 +1,16 @@
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.ratelimit import limiter
 from app.db.database import get_db
 from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.schemas.order import CheckoutCreate, CheckoutOut
 
 router = APIRouter(prefix="/api/checkout", tags=["checkout"])
-limiter = Limiter(key_func=get_remote_address)
 
 # Tiers: (max_qty_inclusive, price)
 _RATES = {
@@ -92,7 +90,7 @@ async def create_checkout(
         shipping=shipping,
         total=total,
         status="pending",
-        customer=payload.customer,
+        customer=payload.customer.model_dump() if payload.customer else None,
         items=order_items,
     )
     db.add(order)

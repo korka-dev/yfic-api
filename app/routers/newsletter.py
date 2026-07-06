@@ -1,16 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.ratelimit import limiter
 from app.db.database import get_db
 from app.models.newsletter import NewsletterSubscriber
 from app.schemas.newsletter import NewsletterCreate, NewsletterOut
 
 router = APIRouter(prefix="/api/newsletter", tags=["newsletter"])
-limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("", response_model=NewsletterOut, status_code=201)

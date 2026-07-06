@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     secret_key: str = "change-me-in-production"
     admin_email: str = "admin@yfic.com"
-    admin_password: str = "yfic-admin-2026"
+    admin_password: str  # obligatoire — aucun défaut ne doit exister dans le code
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
     resend_api_key: str = ""
@@ -40,6 +40,15 @@ class Settings(BaseSettings):
             )
         if len(v) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters long")
+        return v
+
+    @field_validator("admin_password")
+    @classmethod
+    def validate_admin_password(cls, v: str) -> str:
+        if v in ("change-me", "yfic-admin-2026", "") or len(v) < 8:
+            raise ValueError(
+                "ADMIN_PASSWORD must be a strong unique value (8+ chars, not a known default)"
+            )
         return v
 
     @property
